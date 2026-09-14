@@ -72,6 +72,15 @@ export const deleteTeacherDb = (id) =>
   supabase.from('teachers').delete().eq('id', id);
 
 // ============================================================
+// ACADEMIC YEARS
+// ============================================================
+export const fetchAllAcademicYears = () =>
+  supabase.from('academic_years').select('*').order('year_code', { ascending: false });
+
+export const insertAcademicYear = (yearCode) =>
+  supabase.from('academic_years').insert({ year_code: yearCode }).select().single();
+
+// ============================================================
 // CLASSES
 // ============================================================
 export const fetchAllClasses = () =>
@@ -79,6 +88,9 @@ export const fetchAllClasses = () =>
 
 export const insertClass = (data) =>
   supabase.from('classes').insert(data).select().single();
+
+export const deleteClassDb = (id) =>
+  supabase.from('classes').delete().eq('id', id);
 
 // ============================================================
 // SUBJECTS

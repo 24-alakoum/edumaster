@@ -20,6 +20,9 @@ import {
   insertTeacher,
   deleteTeacherDb,
   insertClass,
+  deleteClassDb,
+  fetchAllAcademicYears,
+  insertAcademicYear,
   insertGrade,
   deleteGradeDb,
   insertPayment,
@@ -53,6 +56,12 @@ export const AppProvider = ({ children }) => {
   const [grades,    setGrades]    = useState([]);
   const [payments,  setPayments]  = useState([]);
   const [schedules, setSchedules] = useState({});
+  const [academicYears, setAcademicYears] = useState([
+    { id: '1', year_code: '2026-2027', is_current: false },
+    { id: '2', year_code: '2025-2026', is_current: true },
+    { id: '3', year_code: '2024-2025', is_current: false },
+  ]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('2025-2026');
   const [dataLoading, setDataLoading] = useState(false);
 
   // ── Parent ───────────────────────────────────────────────────
@@ -122,12 +131,18 @@ export const AppProvider = ({ children }) => {
   const loadDataForRole = async (role, _userId, profileId) => {
     setDataLoading(true);
     try {
-      const [clsRes, subRes] = await Promise.all([
+      const [clsRes, subRes, ayRes] = await Promise.all([
         fetchAllClasses(),
         fetchAllSubjects(),
+        fetchAllAcademicYears(),
       ]);
       setClasses(clsRes.data  || []);
       setSubjects(subRes.data || []);
+      if (ayRes?.data && ayRes.data.length > 0) {
+        setAcademicYears(ayRes.data);
+        const curr = ayRes.data.find(a => a.is_current);
+        if (curr) setSelectedAcademicYear(curr.year_code);
+      }
 
       if (role === 'admin') {
         const [stuRes, tchRes, grdRes, payRes] = await Promise.all([
@@ -297,13 +312,48 @@ export const AppProvider = ({ children }) => {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // ADMIN CRUD — CLASSES
+  // ADMIN CRUD — CLASSES & ACADEMIC YEARS
   // ─────────────────────────────────────────────────────────────
   const addClass = async (data) => {
-    const { data: c, error } = await insertClass(data);
-    if (error) return { error: error.message };
-    setClasses((p) => [...p, c]);
+    const payload = {
+      name: data.name,
+      level: data.level || 'Collège',
+      academic_year: data.academic_year || selectedAcademicYear || '2025-2026',
+    };
+    const { data: c, error } = await insertClass(payload);
+    if (error) {
+      console.error('addClass DB error:', error);
+      return { error: error.message || 'Erreur lors de la création de la classe' };
+    }
+    setClasses((p) => [c, ...p]);
     return { data: c };
+  };
+
+  const deleteClass = async (id) => {
+    const { error } = await deleteClassDb(id);
+    if (error) return { error: error.message };
+    setClasses((p) => p.filter((c) => c.id !== id));
+    return { success: true };
+  };
+
+  const addAcademicYear = async (yearCode) => {
+    const trimmed = yearCode.trim();
+    if (!trimmed) return { error: "Code d'année invalide" };
+    const { data: ay, error } = await insertAcademicYear(trimmed);
+    if (error) {
+      // Fallback local if DB error or offline
+      const fallback = { id: Date.now().toString(), year_code: trimmed, is_current: false };
+      setAcademicYears((prev) => {
+        if (prev.some(y => y.year_code === trimmed)) return prev;
+        return [fallback, ...prev];
+      });
+      return { data: fallback };
+    }
+    setAcademicYears((prev) => {
+      if (prev.some(y => y.year_code === trimmed)) return prev;
+      return [ay, ...prev];
+    });
+    return { data: ay };
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -390,8 +440,12 @@ export const AppProvider = ({ children }) => {
         authLoading,
         dataLoading,
         signOut,
-        // School
+        // School & Academic Years
         schoolInfo,
+        academicYears,
+        selectedAcademicYear,
+        setSelectedAcademicYear,
+        addAcademicYear,
         // Data
         students,
         teachers,
@@ -420,6 +474,7 @@ export const AppProvider = ({ children }) => {
         addTeacher,
         deleteTeacher,
         addClass,
+        deleteClass,
         addGrade,
         deleteGrade,
         calculateStudentAverage,
