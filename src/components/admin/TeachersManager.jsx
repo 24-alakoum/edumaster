@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, GraduationCap, Mail, Phone, BookOpen, Trash2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, GraduationCap, Mail, Phone, BookOpen, Trash2, Edit, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const TeachersManager = () => {
-  const { teachers, classes, subjects, addTeacher, deleteTeacher } = useApp();
+  const { teachers, classes, subjects, addTeacher, updateTeacher, deleteTeacher } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -17,7 +18,8 @@ export const TeachersManager = () => {
     selectedSubjects: []
   });
 
-  const handleOpenModal = () => {
+  const handleOpenAddModal = () => {
+    setEditingTeacher(null);
     setErrorMsg('');
     setFormData({
       name: '',
@@ -30,6 +32,20 @@ export const TeachersManager = () => {
     setIsModalOpen(true);
   };
 
+  const handleOpenEditModal = (teacher) => {
+    setEditingTeacher(teacher);
+    setErrorMsg('');
+    setFormData({
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone || '',
+      specialty: teacher.specialty || 'Mathématiques',
+      selectedClasses: teacher.classes || [],
+      selectedSubjects: teacher.subjects || []
+    });
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.email.trim()) return;
@@ -37,14 +53,26 @@ export const TeachersManager = () => {
     setIsSubmitting(true);
     setErrorMsg('');
 
-    const res = await addTeacher({
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      phone: formData.phone.trim(),
-      specialty: formData.specialty,
-      selectedClasses: formData.selectedClasses,
-      selectedSubjects: formData.selectedSubjects
-    });
+    let res;
+    if (editingTeacher) {
+      res = await updateTeacher(editingTeacher.id, {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        specialty: formData.specialty,
+        selectedClasses: formData.selectedClasses,
+        selectedSubjects: formData.selectedSubjects
+      });
+    } else {
+      res = await addTeacher({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        specialty: formData.specialty,
+        selectedClasses: formData.selectedClasses,
+        selectedSubjects: formData.selectedSubjects
+      });
+    }
 
     setIsSubmitting(false);
 
@@ -100,13 +128,22 @@ export const TeachersManager = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => deleteTeacher(teacher.id)}
-                className="text-work-400 hover:text-rose-600 p-1 transition-smooth"
-                title="Supprimer l'enseignant"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleOpenEditModal(teacher)}
+                  className="text-work-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 transition-smooth"
+                  title="Modifier le professeur"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => deleteTeacher(teacher.id)}
+                  className="text-work-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-smooth"
+                  title="Supprimer l'enseignant"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-1.5 text-xs text-work-600 pt-2 border-t border-work-100">
@@ -147,7 +184,9 @@ export const TeachersManager = () => {
         <div className="fixed inset-0 z-50 bg-work-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-work-200 space-y-4">
             <div className="flex items-center justify-between border-b border-work-200 pb-3">
-              <h3 className="font-extrabold text-lg text-work-900">Nouveau Professeur</h3>
+              <h3 className="font-extrabold text-lg text-work-900">
+                {editingTeacher ? "Modifier la fiche professeur" : "Ajouter un Enseignant"}
+              </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-work-400 hover:text-work-900 font-bold">✕</button>
             </div>
 
@@ -245,7 +284,7 @@ export const TeachersManager = () => {
                   className="px-4 py-2 bg-success-600 text-white rounded-xl font-bold hover:bg-success-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Créer l'enseignant</span>
+                  <span>{editingTeacher ? "Enregistrer les modifications" : "Créer l'enseignant"}</span>
                 </button>
               </div>
             </form>

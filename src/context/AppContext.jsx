@@ -21,6 +21,7 @@ import {
   updateStudentDb,
   deleteStudentDb,
   insertTeacher,
+  updateTeacherDb,
   deleteTeacherDb,
   insertClass,
   deleteClassDb,
@@ -390,6 +391,24 @@ export const AppProvider = ({ children }) => {
     return { data: teacherWithCompat };
   };
 
+  const updateTeacher = async (id, updated) => {
+    const payload = {
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone || '',
+      specialty: updated.specialty || 'Général',
+    };
+    const { error } = await updateTeacherDb(id, payload);
+    if (error) return { error: error.message };
+    setTeachers((p) => p.map((t) => (t.id === id ? {
+      ...t,
+      ...payload,
+      classes: updated.selectedClasses || t.classes || [],
+      subjects: updated.selectedSubjects || t.subjects || [],
+    } : t)));
+    return { success: true };
+  };
+
   const deleteTeacher = async (id) => {
     const { error } = await deleteTeacherDb(id);
     if (error) return { error: error.message };
@@ -533,25 +552,51 @@ export const AppProvider = ({ children }) => {
   // PAYMENTS
   // ─────────────────────────────────────────────────────────────
   const recordPayment = async (paymentData) => {
-    const reference = `PAY-${Date.now()}`;
-    const { data: pay, error } = await insertPayment({
-      ...paymentData,
+    const reference = paymentData.reference || `PAY-${Date.now()}`;
+    const targetStudentId = paymentData.student_id || paymentData.studentId;
+    const targetStudent = students.find(s => s.id === targetStudentId);
+
+    const payload = {
+      student_id: targetStudentId,
+      student_name: paymentData.student_name || paymentData.studentName || targetStudent?.name || 'Élève',
+      matricule: paymentData.matricule || targetStudent?.matricule || 'N/A',
+      amount: Number(paymentData.amount) || 0,
+      method: paymentData.method || 'Espèces',
       reference,
-      status:      'Confirmé',
-      recorded_by: userProfile?.full_name || 'Admin',
-    });
-    if (error) return { error: error.message };
-    setPayments((p) => [pay, ...p]);
-    setStudents((p) =>
-      p.map((s) => {
-        if (s.id === paymentData.student_id) {
-          const newPaid = (s.tuition_paid || 0) + Number(paymentData.amount);
-          return { ...s, tuition_paid: newPaid };
-        }
-        return s;
-      })
-    );
-    return { data: pay };
+      status: 'Confirmé',
+    };
+
+    const { data: pay, error } = await insertPayment(payload);
+    if (error) {
+      console.error('recordPayment DB error:', error);
+      return { error: error.message };
+    }
+
+    // Update student's tuition_paid in Supabase DB
+    if (targetStudent) {
+      const currentPaid = Number(targetStudent.tuition_paid || targetStudent.tuitionPaid || 0);
+      const newPaid = currentPaid + payload.amount;
+      await updateStudentDb(targetStudent.id, { tuition_paid: newPaid });
+      setStudents((prev) =>
+        prev.map((s) => (s.id === targetStudent.id ? { ...s, tuition_paid: newPaid, tuitionPaid: newPaid } : s))
+      );
+    }
+
+    const paymentWithCompat = {
+      ...pay,
+      studentId: pay.student_id,
+      studentName: pay.student_name,
+      matricule: pay.matricule,
+      amount: Number(pay.amount),
+      method: pay.method,
+      reference: pay.reference,
+      date: pay.payment_date || new Date().toISOString().split('T')[0],
+      recordedBy: userProfile?.full_name || 'Admin',
+      status: pay.status || 'Confirmé',
+    };
+
+    setPayments((prev) => [paymentWithCompat, ...prev]);
+    return { data: paymentWithCompat };
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -609,6 +654,7 @@ export const AppProvider = ({ children }) => {
         deleteStudent,
         importStudents,
         addTeacher,
+        updateTeacher,
         deleteTeacher,
         addClass,
         deleteClass,

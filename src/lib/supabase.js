@@ -68,6 +68,9 @@ export const fetchAllTeachers = () =>
 export const insertTeacher = (data) =>
   supabase.from('teachers').insert(data).select().single();
 
+export const updateTeacherDb = (id, data) =>
+  supabase.from('teachers').update(data).eq('id', id);
+
 export const deleteTeacherDb = (id) =>
   supabase.from('teachers').delete().eq('id', id);
 
