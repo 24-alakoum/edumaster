@@ -1,28 +1,58 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, GraduationCap, Mail, Phone, BookOpen, Trash2, CheckCircle2 } from 'lucide-react';
+import { Plus, GraduationCap, Mail, Phone, BookOpen, Trash2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const TeachersManager = () => {
   const { teachers, classes, subjects, addTeacher, deleteTeacher } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     specialty: 'Mathématiques',
-    selectedClasses: ['cls-3a'],
-    selectedSubjects: ['sub-math']
+    selectedClasses: [],
+    selectedSubjects: []
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    addTeacher({
-      ...formData,
-      classes: formData.selectedClasses,
-      subjects: formData.selectedSubjects
+  const handleOpenModal = () => {
+    setErrorMsg('');
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      specialty: 'Mathématiques',
+      selectedClasses: classes.length > 0 ? [classes[0].id] : [],
+      selectedSubjects: subjects.length > 0 ? [subjects[0].id] : []
     });
-    setIsModalOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.email.trim()) return;
+
+    setIsSubmitting(true);
+    setErrorMsg('');
+
+    const res = await addTeacher({
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      specialty: formData.specialty,
+      selectedClasses: formData.selectedClasses,
+      selectedSubjects: formData.selectedSubjects
+    });
+
+    setIsSubmitting(false);
+
+    if (res?.error) {
+      setErrorMsg(res.error);
+    } else {
+      setIsModalOpen(false);
+    }
   };
 
   const toggleClass = (classId) => {
@@ -47,7 +77,7 @@ export const TeachersManager = () => {
         </div>
 
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleOpenModal}
           className="bg-success-600 hover:bg-success-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-smooth shadow-sm flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -120,6 +150,13 @@ export const TeachersManager = () => {
               <h3 className="font-extrabold text-lg text-work-900">Nouveau Professeur</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-work-400 hover:text-work-900 font-bold">✕</button>
             </div>
+
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
@@ -204,9 +241,11 @@ export const TeachersManager = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-success-600 text-white rounded-xl font-bold hover:bg-success-700"
+                  disabled={isSubmitting || !formData.name.trim() || !formData.email.trim()}
+                  className="px-4 py-2 bg-success-600 text-white rounded-xl font-bold hover:bg-success-700 disabled:opacity-50 flex items-center gap-2"
                 >
-                  Créer l'enseignant
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>Créer l'enseignant</span>
                 </button>
               </div>
             </form>

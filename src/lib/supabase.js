@@ -149,8 +149,17 @@ export const insertPayment = (data) =>
 // ============================================================
 // SCHEDULES
 // ============================================================
+export const fetchAllSchedules = () =>
+  supabase.from('schedules').select('*');
+
 export const fetchSchedulesByClass = (classId) =>
   supabase.from('schedules').select('*').eq('class_id', classId);
+
+export const insertSchedule = (data) =>
+  supabase.from('schedules').insert(data).select().single();
+
+export const deleteScheduleDb = (id) =>
+  supabase.from('schedules').delete().eq('id', id);
 
 // ============================================================
 // PARENTS

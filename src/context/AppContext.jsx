@@ -8,6 +8,9 @@ import {
   fetchAllSubjects,
   fetchAllGrades,
   fetchAllPayments,
+  fetchAllSchedules,
+  insertSchedule,
+  deleteScheduleDb,
   fetchParentByProfileId,
   fetchParentChildren,
   fetchStudentByProfileId,
@@ -145,16 +148,43 @@ export const AppProvider = ({ children }) => {
       }
 
       if (role === 'admin') {
-        const [stuRes, tchRes, grdRes, payRes] = await Promise.all([
+        const [stuRes, tchRes, grdRes, payRes, schRes] = await Promise.all([
           fetchAllStudents(),
           fetchAllTeachers(),
           fetchAllGrades(),
           fetchAllPayments(),
+          fetchAllSchedules(),
         ]);
-        setStudents(stuRes.data || []);
+        const mappedStudents = (stuRes.data || []).map(s => ({
+          ...s,
+          classId: s.class_id || s.classId,
+          parentName: s.parent_name || s.parentName,
+          parentPhone: s.parent_phone || s.parentPhone,
+          tuitionTotal: s.tuition_total || s.tuitionTotal,
+          tuitionPaid: s.tuition_paid || s.tuitionPaid,
+          dateOfBirth: s.date_of_birth || s.dateOfBirth,
+        }));
+        setStudents(mappedStudents);
         setTeachers(tchRes.data || []);
         setGrades(grdRes.data   || []);
         setPayments(payRes.data || []);
+
+        // Schedule Map
+        const schedMap = {};
+        (schRes?.data || []).forEach(item => {
+          const cId = item.class_id;
+          if (!schedMap[cId]) schedMap[cId] = [];
+          schedMap[cId].push({
+            id: item.id,
+            day: item.day_name,
+            time: item.time_slot,
+            subject: item.subject_name,
+            teacher: item.teacher_name,
+            room: item.classroom,
+            class_id: item.class_id,
+          });
+        });
+        setSchedules(schedMap);
 
       } else if (role === 'teacher') {
         const [stuRes, grdRes] = await Promise.all([
@@ -254,17 +284,59 @@ export const AppProvider = ({ children }) => {
   // ADMIN CRUD — STUDENTS
   // ─────────────────────────────────────────────────────────────
   const addStudent = async (data) => {
-    const matricule = `EDU-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-    const { data: s, error } = await insertStudent({ ...data, matricule });
-    if (error) return { error: error.message };
-    setStudents((p) => [s, ...p]);
-    return { data: s };
+    const matricule = data.matricule || `EDU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const payload = {
+      name: data.name,
+      gender: data.gender || 'M',
+      date_of_birth: data.date_of_birth || data.dateOfBirth || null,
+      class_id: data.class_id || data.classId || null,
+      parent_name: data.parent_name || data.parentName || '',
+      parent_phone: data.parent_phone || data.parentPhone || '',
+      tuition_total: Number(data.tuition_total || data.tuitionTotal) || 450000,
+      tuition_paid: Number(data.tuition_paid || data.tuitionPaid) || 0,
+      matricule,
+    };
+    const { data: s, error } = await insertStudent(payload);
+    if (error) {
+      console.error('addStudent DB error:', error);
+      return { error: error.message };
+    }
+    const studentWithCompat = {
+      ...s,
+      classId: s.class_id,
+      parentName: s.parent_name,
+      parentPhone: s.parent_phone,
+      tuitionTotal: s.tuition_total,
+      tuitionPaid: s.tuition_paid,
+      dateOfBirth: s.date_of_birth,
+    };
+    setStudents((p) => [studentWithCompat, ...p]);
+    return { data: studentWithCompat };
   };
 
   const updateStudent = async (id, updated) => {
-    const { error } = await updateStudentDb(id, updated);
+    const payload = {
+      name: updated.name,
+      gender: updated.gender,
+      date_of_birth: updated.date_of_birth || updated.dateOfBirth || null,
+      class_id: updated.class_id || updated.classId || null,
+      parent_name: updated.parent_name || updated.parentName || '',
+      parent_phone: updated.parent_phone || updated.parentPhone || '',
+      tuition_total: Number(updated.tuition_total || updated.tuitionTotal) || 450000,
+      tuition_paid: Number(updated.tuition_paid || updated.tuitionPaid) || 0,
+    };
+    const { error } = await updateStudentDb(id, payload);
     if (error) return { error: error.message };
-    setStudents((p) => p.map((s) => (s.id === id ? { ...s, ...updated } : s)));
+    setStudents((p) => p.map((s) => (s.id === id ? {
+      ...s,
+      ...payload,
+      classId: payload.class_id,
+      parentName: payload.parent_name,
+      parentPhone: payload.parent_phone,
+      tuitionTotal: payload.tuition_total,
+      tuitionPaid: payload.tuition_paid,
+      dateOfBirth: payload.date_of_birth,
+    } : s)));
     return { success: true };
   };
 
@@ -298,10 +370,24 @@ export const AppProvider = ({ children }) => {
   // ADMIN CRUD — TEACHERS
   // ─────────────────────────────────────────────────────────────
   const addTeacher = async (data) => {
-    const { data: t, error } = await insertTeacher(data);
-    if (error) return { error: error.message };
-    setTeachers((p) => [t, ...p]);
-    return { data: t };
+    const payload = {
+      name: data.name,
+      email: data.email,
+      phone: data.phone || '',
+      specialty: data.specialty || 'Général',
+    };
+    const { data: t, error } = await insertTeacher(payload);
+    if (error) {
+      console.error('addTeacher DB error:', error);
+      return { error: error.message };
+    }
+    const teacherWithCompat = {
+      ...t,
+      classes: data.selectedClasses || data.classes || [],
+      subjects: data.selectedSubjects || data.subjects || [],
+    };
+    setTeachers((p) => [teacherWithCompat, ...p]);
+    return { data: teacherWithCompat };
   };
 
   const deleteTeacher = async (id) => {
@@ -354,6 +440,57 @@ export const AppProvider = ({ children }) => {
       return [ay, ...prev];
     });
     return { data: ay };
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // SCHEDULES
+  // ─────────────────────────────────────────────────────────────
+  const addScheduleSlot = async (slotData) => {
+    const payload = {
+      class_id: slotData.class_id || slotData.classId,
+      subject_name: slotData.subject_name || slotData.subject,
+      teacher_name: slotData.teacher_name || slotData.teacher || 'Enseignant',
+      day_name: slotData.day_name || slotData.day,
+      time_slot: slotData.time_slot || slotData.time,
+      classroom: slotData.classroom || slotData.room || 'Salle A',
+    };
+    const { data: s, error } = await insertSchedule(payload);
+    if (error) {
+      console.error('addScheduleSlot DB error:', error);
+      return { error: error.message };
+    }
+    const newSlot = {
+      id: s.id,
+      day: s.day_name,
+      time: s.time_slot,
+      subject: s.subject_name,
+      teacher: s.teacher_name,
+      room: s.classroom,
+      class_id: s.class_id,
+    };
+    setSchedules((prev) => {
+      const clsId = payload.class_id;
+      const currentClsSchedules = prev[clsId] || [];
+      return {
+        ...prev,
+        [clsId]: [...currentClsSchedules, newSlot]
+      };
+    });
+    return { data: newSlot };
+  };
+
+  const deleteScheduleSlot = async (id, classId) => {
+    const { error } = await deleteScheduleDb(id);
+    if (error) return { error: error.message };
+    setSchedules((prev) => {
+      const clsId = classId;
+      const currentClsSchedules = prev[clsId] || [];
+      return {
+        ...prev,
+        [clsId]: currentClsSchedules.filter((item) => item.id !== id)
+      };
+    });
+    return { success: true };
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -475,6 +612,8 @@ export const AppProvider = ({ children }) => {
         deleteTeacher,
         addClass,
         deleteClass,
+        addScheduleSlot,
+        deleteScheduleSlot,
         addGrade,
         deleteGrade,
         calculateStudentAverage,

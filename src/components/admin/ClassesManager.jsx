@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Plus, School, Users, Calendar, Clock, MapPin, User,
-  Trash2, AlertCircle, Loader2, Sparkles, Filter
+  Trash2, AlertCircle, Loader2, Sparkles, Filter, BookOpen
 } from 'lucide-react';
 
 export const ClassesManager = () => {
   const {
     classes,
     students,
+    teachers,
+    subjects,
     addClass,
     deleteClass,
     schedules,
+    addScheduleSlot,
+    deleteScheduleSlot,
     academicYears,
     selectedAcademicYear,
     setSelectedAcademicYear,
@@ -21,14 +25,22 @@ export const ClassesManager = () => {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [isAddClassModalOpen, setIsAddClassModalOpen] = useState(false);
   const [isAddYearModalOpen, setIsAddYearModalOpen] = useState(false);
+  const [isAddScheduleModalOpen, setIsAddScheduleModalOpen] = useState(false);
 
-  // Form states
+  // Form states - Class
   const [newClassName, setNewClassName] = useState('');
   const [newClassLevel, setNewClassLevel] = useState('Collège');
   const [newClassYear, setNewClassYear] = useState(selectedAcademicYear || '2025-2026');
 
-  // Academic Year modal state
+  // Form states - Academic Year
   const [newYearInput, setNewYearInput] = useState('');
+
+  // Form states - Schedule Slot
+  const [slotDay, setSlotDay] = useState('Lundi');
+  const [slotTime, setSlotTime] = useState('08h00 - 10h00');
+  const [slotSubject, setSlotSubject] = useState(subjects[0]?.name || 'Mathématiques');
+  const [slotTeacher, setSlotTeacher] = useState(teachers[0]?.name || 'Professeur');
+  const [slotRoom, setSlotRoom] = useState('Salle 101');
 
   // UI status states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +55,7 @@ export const ClassesManager = () => {
   // Active class object for schedule display
   const activeClassId = selectedClassId || filteredClasses[0]?.id || classes[0]?.id;
   const selectedClassObj = classes.find(c => c.id === activeClassId);
-  const activeSchedule = schedules[activeClassId] || schedules['cls-3a'] || [];
+  const activeSchedule = (selectedClassObj ? schedules[selectedClassObj.id] : []) || [];
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
@@ -92,6 +104,31 @@ export const ClassesManager = () => {
     }
   };
 
+  const handleCreateScheduleSlot = async (e) => {
+    e.preventDefault();
+    if (!selectedClassObj) return;
+
+    setIsSubmitting(true);
+    setErrorMsg('');
+
+    const res = await addScheduleSlot({
+      class_id: selectedClassObj.id,
+      day_name: slotDay,
+      time_slot: slotTime,
+      subject_name: slotSubject,
+      teacher_name: slotTeacher,
+      classroom: slotRoom,
+    });
+
+    setIsSubmitting(false);
+
+    if (res?.error) {
+      setErrorMsg(res.error);
+    } else {
+      setIsAddScheduleModalOpen(false);
+    }
+  };
+
   const handleDeleteClass = async (id, className) => {
     if (!window.confirm(`Voulez-vous vraiment supprimer la classe "${className}" ?`)) return;
     const res = await deleteClass(id);
@@ -100,7 +137,19 @@ export const ClassesManager = () => {
     }
   };
 
+  const handleDeleteSlot = async (slotId) => {
+    if (!selectedClassObj) return;
+    await deleteScheduleSlot(slotId, selectedClassObj.id);
+  };
+
   const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
+  const timeSlotsOptions = [
+    "08h00 - 09h30",
+    "09h30 - 11h00",
+    "11h15 - 12h45",
+    "14h00 - 15h30",
+    "15h30 - 17h00",
+  ];
 
   return (
     <div className="space-y-6">
@@ -248,7 +297,7 @@ export const ClassesManager = () => {
       {/* Timetable Display for Active Class */}
       {selectedClassObj && (
         <div className="bg-white p-6 rounded-2xl border border-work-200 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-work-200 pb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-work-200 pb-4">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold text-work-900">Emploi du Temps — {selectedClassObj.name}</h3>
@@ -263,6 +312,19 @@ export const ClassesManager = () => {
                 Planning des cours hebdomadaires pour les enseignants et élèves de la classe {selectedClassObj.name}.
               </p>
             </div>
+
+            <button
+              onClick={() => {
+                if (subjects.length > 0) setSlotSubject(subjects[0].name);
+                if (teachers.length > 0) setSlotTeacher(teachers[0].name);
+                setErrorMsg('');
+                setIsAddScheduleModalOpen(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-smooth shadow-sm flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Ajouter un cours</span>
+            </button>
           </div>
 
           {/* Schedule Grid Days */}
@@ -283,12 +345,23 @@ export const ClassesManager = () => {
                   ) : (
                     <div className="space-y-2.5">
                       {daySlots.map((slot, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-xl border border-work-200 shadow-xs space-y-1.5 hover:border-emerald-400 transition-smooth">
-                          <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                            <Clock className="w-3 h-3" />
-                            <span>{slot.time}</span>
+                        <div key={slot.id || idx} className="bg-white p-3 rounded-xl border border-work-200 shadow-xs space-y-1.5 hover:border-emerald-400 transition-smooth group relative">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                              <Clock className="w-3 h-3" />
+                              <span>{slot.time}</span>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="text-work-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                              title="Supprimer ce cours"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           </div>
+
                           <div className="font-extrabold text-work-900 text-xs">{slot.subject}</div>
+
                           <div className="flex items-center justify-between text-[10px] text-work-500 pt-1 border-t border-work-100">
                             <span className="flex items-center gap-1 font-medium">
                               <User className="w-3 h-3 text-work-400" /> {slot.teacher}
@@ -461,6 +534,118 @@ export const ClassesManager = () => {
                 >
                   {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Ajouter l'année</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Ajouter un créneau d'Emploi du Temps */}
+      {isAddScheduleModalOpen && selectedClassObj && (
+        <div className="fixed inset-0 z-50 bg-work-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-work-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-work-200 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-work-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-600" />
+                  <span>Ajouter un cours — {selectedClassObj.name}</span>
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsAddScheduleModalOpen(false)}
+                className="text-work-400 hover:text-work-700 font-bold p-1 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold">
+                {errorMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateScheduleSlot} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-work-800">Jour *</label>
+                  <select
+                    value={slotDay}
+                    onChange={(e) => setSlotDay(e.target.value)}
+                    className="w-full p-2.5 border border-work-200 rounded-xl focus:border-emerald-500 focus:outline-none font-semibold bg-white"
+                  >
+                    {days.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-work-800">Horaire *</label>
+                  <select
+                    value={slotTime}
+                    onChange={(e) => setSlotTime(e.target.value)}
+                    className="w-full p-2.5 border border-work-200 rounded-xl focus:border-emerald-500 focus:outline-none font-semibold bg-white"
+                  >
+                    {timeSlotsOptions.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-work-800">Matière *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: Mathématiques, Français, Anglais"
+                  value={slotSubject}
+                  onChange={(e) => setSlotSubject(e.target.value)}
+                  className="w-full p-2.5 border border-work-200 rounded-xl focus:border-emerald-500 focus:outline-none font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-work-800">Enseignant</label>
+                  <input
+                    type="text"
+                    placeholder="ex: Prof. Diallo"
+                    value={slotTeacher}
+                    onChange={(e) => setSlotTeacher(e.target.value)}
+                    className="w-full p-2.5 border border-work-200 rounded-xl focus:border-emerald-500 focus:outline-none font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-work-800">Salle</label>
+                  <input
+                    type="text"
+                    placeholder="ex: Salle 101, Labo A"
+                    value={slotRoom}
+                    onChange={(e) => setSlotRoom(e.target.value)}
+                    className="w-full p-2.5 border border-work-200 rounded-xl focus:border-emerald-500 focus:outline-none font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-work-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAddScheduleModalOpen(false)}
+                  className="px-4 py-2 bg-work-100 text-work-700 rounded-xl font-semibold"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !slotSubject.trim()}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-smooth disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Enregistrer le cours</span>
                 </button>
               </div>
             </form>

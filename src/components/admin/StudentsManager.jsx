@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Search, FileSpreadsheet, Trash2, Edit, Filter, UserCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Search, FileSpreadsheet, Trash2, Edit, Filter, UserCheck, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const StudentsManager = ({ onOpenExcelModal }) => {
   const { students, classes, addStudent, updateStudent, deleteStudent, schoolInfo } = useApp();
@@ -9,6 +9,8 @@ export const StudentsManager = ({ onOpenExcelModal }) => {
   const [selectedClass, setSelectedClass] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -32,11 +34,12 @@ export const StudentsManager = ({ onOpenExcelModal }) => {
 
   const handleOpenAddModal = () => {
     setEditingStudent(null);
+    setErrorMsg('');
     setFormData({
       name: '',
       gender: 'M',
       dateOfBirth: '2010-01-01',
-      classId: classes[0]?.id || 'cls-3a',
+      classId: classes[0]?.id || '',
       parentName: '',
       parentPhone: '',
       tuitionTotal: 450000
@@ -46,36 +49,54 @@ export const StudentsManager = ({ onOpenExcelModal }) => {
 
   const handleOpenEditModal = (student) => {
     setEditingStudent(student);
+    setErrorMsg('');
     setFormData({
       name: student.name,
-      gender: student.gender,
-      dateOfBirth: student.dateOfBirth,
-      classId: student.classId,
-      parentName: student.parentName || '',
-      parentPhone: student.parentPhone || '',
-      tuitionTotal: student.tuitionTotal || 450000
+      gender: student.gender || 'M',
+      dateOfBirth: student.dateOfBirth || student.date_of_birth || '',
+      classId: student.classId || student.class_id || classes[0]?.id || '',
+      parentName: student.parentName || student.parent_name || '',
+      parentPhone: student.parentPhone || student.parent_phone || '',
+      tuitionTotal: student.tuitionTotal || student.tuition_total || 450000
     });
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const targetClass = classes.find(c => c.id === formData.classId);
+    setIsSubmitting(true);
+    setErrorMsg('');
 
+    let res;
     if (editingStudent) {
-      updateStudent(editingStudent.id, {
-        ...formData,
-        className: targetClass ? targetClass.name : 'N/A',
-        tuitionTotal: Number(formData.tuitionTotal)
+      res = await updateStudent(editingStudent.id, {
+        name: formData.name,
+        gender: formData.gender,
+        date_of_birth: formData.dateOfBirth,
+        class_id: formData.classId,
+        parent_name: formData.parentName,
+        parent_phone: formData.parentPhone,
+        tuition_total: Number(formData.tuitionTotal)
       });
     } else {
-      addStudent({
-        ...formData,
-        className: targetClass ? targetClass.name : 'N/A',
-        tuitionTotal: Number(formData.tuitionTotal)
+      res = await addStudent({
+        name: formData.name,
+        gender: formData.gender,
+        date_of_birth: formData.dateOfBirth,
+        class_id: formData.classId,
+        parent_name: formData.parentName,
+        parent_phone: formData.parentPhone,
+        tuition_total: Number(formData.tuitionTotal)
       });
     }
-    setIsModalOpen(false);
+
+    setIsSubmitting(false);
+
+    if (res?.error) {
+      setErrorMsg(res.error);
+    } else {
+      setIsModalOpen(false);
+    }
   };
 
   return (
@@ -250,6 +271,13 @@ export const StudentsManager = ({ onOpenExcelModal }) => {
               </button>
             </div>
 
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
                 <label className="font-bold text-work-800">Nom complet de l'élève *</label>
@@ -335,9 +363,11 @@ export const StudentsManager = ({ onOpenExcelModal }) => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-success-600 text-white rounded-xl font-bold hover:bg-success-700"
+                  disabled={isSubmitting || !formData.name.trim()}
+                  className="px-4 py-2 bg-success-600 text-white rounded-xl font-bold hover:bg-success-700 disabled:opacity-50 flex items-center gap-2"
                 >
-                  {editingStudent ? "Enregistrer les modifications" : "Inscrire l'élève"}
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{editingStudent ? "Enregistrer les modifications" : "Inscrire l'élève"}</span>
                 </button>
               </div>
             </form>
